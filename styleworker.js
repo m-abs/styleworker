@@ -2,13 +2,14 @@ $( function( ) {
 	"use strict";
 
 	var cssDifference = function( data1, data2 ) {
-		var ret = {
-			'new' : [],
-			'removed' : [],
-			'diffs' : {},
-			'origs' : {},
-			'current' : data2
-		},
+		var
+			ret = {
+				'new'     : [],
+				'removed' : [],
+				'diffs'   : {},
+				'origs'   : {},
+				'current' : data2
+			},
 			changed = false,
 			keys = {};
 
@@ -18,29 +19,31 @@ $( function( ) {
 
 		// Find all keys
 		for ( var key in data1 ) {
-			if ( !keys[ key ] ) {
+			if ( key !== 'prototype' && !keys[ key ] ) {
 				keys[ key ] = 1;
 			}
 		}
 
 		for ( var key in data2 ) {
-			if ( !keys[ key ] ) {
+			if ( key !== 'prototype' && !keys[ key ] ) {
 				keys[ key ] = 1;
 			}
 		}
 
 		for ( var key in keys ) {
-			if ( data1[ key ] !== undefined && data2[ key ] === undefined ) {
-				ret[ 'removed' ].push( key );
-				changed = true;
-			} else if ( data1[ key ] === undefined && data2[ key ] !== undefined ) {
-				ret[ 'new' ].push( key );
-				ret[ 'diffs' ][ key ] = data2[ key ];
-				changed = true;
-			} else if ( data1[ key ] !== data2[ key ] ) {
-				ret[ 'origs' ][ key ] = data1[ key ];
-				ret[ 'diffs' ][ key ] = data2[ key ];
-				changed = true;
+			if ( key !== 'prototype' ) {
+				if ( data1[ key ] !== undefined && data2[ key ] === undefined ) {
+					ret[ 'removed' ].push( key );
+					changed = true;
+				} else if ( data1[ key ] === undefined && data2[ key ] !== undefined ) {
+					ret[ 'new' ].push( key );
+					ret[ 'diffs' ][ key ] = data2[ key ];
+					changed = true;
+				} else if ( data1[ key ] !== data2[ key ] ) {
+					ret[ 'origs' ][ key ] = data1[ key ];
+					ret[ 'diffs' ][ key ] = data2[ key ];
+					changed = true;
+				}
 			}
 		}
 
@@ -55,31 +58,33 @@ $( function( ) {
 
 	window.logStyles = function( ) {
 		var newRules = {};
-	
+
+		console.log( document.styleSheets );
 		$.each( document.styleSheets, function( idx, styleSheet ) {
+			console.log( idx, styleSheet );
 			if ( !originalRules[ styleSheet.href ] ) {
 				originalRules[ styleSheet.href ] = {};
 			}
-	
+
 			var rules = ( styleSheet.rules || styleSheet.cssRules );
 			if ( rules && styleSheet.href ) {
 				$.each( rules, function( idx2, rule ) {
 					if ( rule.constructor === CSSStyleRule ) {
 						var tmpObj = {},
 							diffs;
-	
+
 						for ( var i = 0; i < rule.style.length; i += 1 ) {
 							var key = rule.style[ i ],
 								val = rule.style[ key ];
-	
-							tmpObj[ key ] = val;
+
+							tmpObj[ key ] = val;
 						}
-	
+
 						if ( !originalRules[ styleSheet.href ][ rule.selectorText ] ) {
 							originalRules[ styleSheet.href ][ rule.selectorText ] = {};
 						}
-	
-						if ( !originalRules[ styleSheet.href ][ rule.selectorText ][ idx ] ) {
+
+						if ( !originalRules[ styleSheet.href ][ rule.selectorText ][ idx ] ) {
 							originalRules[ styleSheet.href ][ rule.selectorText ][ idx ] = tmpObj;
 						} else {
 							diffs = cssDifference( originalRules[ styleSheet.href ][ rule.selectorText ][ idx ], tmpObj );
@@ -90,8 +95,8 @@ $( function( ) {
 								if ( !newRules[ styleSheet.href ][ rule.selectorText ] ) {
 									newRules[ styleSheet.href ][ rule.selectorText ] = {};
 								}
-	
-								if ( !newRules[ styleSheet.href ][ rule.selectorText ][ idx ] ) {
+
+								if ( !newRules[ styleSheet.href ][ rule.selectorText ][ idx ] ) {
 									newRules[ styleSheet.href ][ rule.selectorText ][ idx ] = diffs;
 								}
 							}
@@ -100,16 +105,16 @@ $( function( ) {
 				} );
 			}
 		} );
-	
+
 		if ( !$.isEmptyObject( newRules ) ) {
 			return newRules;
 		}
 	};
-	
+
 	setTimeout( function() {
 		window.logStyles();
 	}, 100 );
-	
+
 	window.printDiff = function( ) {
 		var output = $( "<div/>" )
 			.css( {
@@ -138,7 +143,7 @@ $( function( ) {
 
 				$( "<hr/>" )
 					.appendTo( output );
-				
+
 				var content = $( '<div/>' );
 				$.each( rules, function( selector, data ) {
 					$( "<h3/>" )
