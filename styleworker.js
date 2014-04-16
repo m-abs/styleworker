@@ -1,10 +1,18 @@
+/*jshint browser: true */
+
+/*global $, CSSStyleRule */
 $( function( ) {
 	"use strict";
 
-	var cssDifference = function( data1, data2 ) {
+	var originalRules = {},
+	makeArray = function( arr ) {
+		return Array.prototype.slice.call( arr, 0 );
+	},
+
+	cssDifference = function( data1, data2 ) {
 		var
 			ret = {
-				'new'     : [],
+				'added'   : [],
 				'removed' : [],
 				'diffs'   : {},
 				'origs'   : {},
@@ -18,34 +26,26 @@ $( function( ) {
 		}
 
 		// Find all keys
-		for ( var key in data1 ) {
-			if ( key !== 'prototype' && !keys[ key ] ) {
+		[ data1, data2 ].forEach( function( obj ) {
+			Object.keys( obj ).forEach( function( key ) {
 				keys[ key ] = 1;
-			}
-		}
+			} );
+		} );
 
-		for ( var key in data2 ) {
-			if ( key !== 'prototype' && !keys[ key ] ) {
-				keys[ key ] = 1;
+		Object.keys( keys ).forEach( function( key ) {
+			if ( data1[ key ] !== undefined && data2[ key ] === undefined ) {
+				ret.removed.push( key );
+				changed = true;
+			} else if ( data1[ key ] === undefined && data2[ key ] !== undefined ) {
+				ret.added.push( key );
+				ret.diffs[ key ] = data2[ key ];
+				changed = true;
+			} else if ( data1[ key ] !== data2[ key ] ) {
+				ret.origs[ key ] = data1[ key ];
+				ret.diffs[ key ] = data2[ key ];
+				changed = true;
 			}
-		}
-
-		for ( var key in keys ) {
-			if ( key !== 'prototype' ) {
-				if ( data1[ key ] !== undefined && data2[ key ] === undefined ) {
-					ret[ 'removed' ].push( key );
-					changed = true;
-				} else if ( data1[ key ] === undefined && data2[ key ] !== undefined ) {
-					ret[ 'new' ].push( key );
-					ret[ 'diffs' ][ key ] = data2[ key ];
-					changed = true;
-				} else if ( data1[ key ] !== data2[ key ] ) {
-					ret[ 'origs' ][ key ] = data1[ key ];
-					ret[ 'diffs' ][ key ] = data2[ key ];
-					changed = true;
-				}
-			}
-		}
+		} );
 
 		if ( changed ) {
 			return ret;
@@ -54,50 +54,52 @@ $( function( ) {
 		return false;
 	};
 
-	var originalRules = {};
-
 	window.logStyles = function( ) {
 		var newRules = {};
 
-		console.log( document.styleSheets );
-		$.each( document.styleSheets, function( idx, styleSheet ) {
-			console.log( idx, styleSheet );
-			if ( !originalRules[ styleSheet.href ] ) {
-				originalRules[ styleSheet.href ] = {};
+		makeArray( document.styleSheets ).forEach( function( styleSheet, idx ) {
+			var href = styleSheet.href,
+				rules = ( styleSheet.rules || styleSheet.cssRules );
+			if ( !href ) {
+				return;
 			}
 
-			var rules = ( styleSheet.rules || styleSheet.cssRules );
-			if ( rules && styleSheet.href ) {
-				$.each( rules, function( idx2, rule ) {
+			console.log( idx, styleSheet, href );
+			if ( !originalRules[ href ] ) {
+				originalRules[ href ] = {};
+			}
+
+			if ( rules ) {
+				makeArray( rules ).forEach( function( rule ) {
 					if ( rule.constructor === CSSStyleRule ) {
 						var tmpObj = {},
+							selectorText = rule.selectorText,
 							diffs;
 
-						for ( var i = 0; i < rule.style.length; i += 1 ) {
-							var key = rule.style[ i ],
-								val = rule.style[ key ];
+						// The CSSStyleRule-object has all posible css-keys in it's style property,
+						// but keys with values are indexed like an array.
+						makeArray( rule.style ).forEach( function( key ) {
+							tmpObj[ key ] = rule.style[ key ];
+						} );
 
-							tmpObj[ key ] = val;
+						if ( !originalRules[ href ][ selectorText ] ) {
+							originalRules[ href ][ selectorText ] = {};
 						}
 
-						if ( !originalRules[ styleSheet.href ][ rule.selectorText ] ) {
-							originalRules[ styleSheet.href ][ rule.selectorText ] = {};
-						}
-
-						if ( !originalRules[ styleSheet.href ][ rule.selectorText ][ idx ] ) {
-							originalRules[ styleSheet.href ][ rule.selectorText ][ idx ] = tmpObj;
+						if ( !originalRules[ href ][ selectorText ][ idx ] ) {
+							originalRules[ href ][ selectorText ][ idx ] = tmpObj;
 						} else {
-							diffs = cssDifference( originalRules[ styleSheet.href ][ rule.selectorText ][ idx ], tmpObj );
+							diffs = cssDifference( originalRules[ href ][ selectorText ][ idx ], tmpObj );
 							if ( diffs ) {
-								if ( !newRules[ styleSheet.href ] ) {
-									newRules[ styleSheet.href ] = {};
+								if ( !newRules[ href ] ) {
+									newRules[ href ] = {};
 								}
-								if ( !newRules[ styleSheet.href ][ rule.selectorText ] ) {
-									newRules[ styleSheet.href ][ rule.selectorText ] = {};
+								if ( !newRules[ href ][ selectorText ] ) {
+									newRules[ href ][ selectorText ] = {};
 								}
 
-								if ( !newRules[ styleSheet.href ][ rule.selectorText ][ idx ] ) {
-									newRules[ styleSheet.href ][ rule.selectorText ][ idx ] = diffs;
+								if ( !newRules[ href ][ selectorText ][ idx ] ) {
+									newRules[ href ][ selectorText ][ idx ] = diffs;
 								}
 							}
 						}
@@ -136,7 +138,10 @@ $( function( ) {
 
 		var newRules = window.logStyles( );
 		if ( newRules ) {
-			$.each( newRules, function( fileUrl, rules ) {
+			Object.keys( newRules ).forEach( function( fileUrl ) {
+				var rules = newRules[ fileUrl ],
+					content = $( '<div/>' );
+
 				$( "<h2/>" )
 					.text( fileUrl )
 					.appendTo( output );
@@ -144,13 +149,14 @@ $( function( ) {
 				$( "<hr/>" )
 					.appendTo( output );
 
-				var content = $( '<div/>' );
-				$.each( rules, function( selector, data ) {
+				Object.keys( rules ).forEach( function( selector ) {
+					var data = rules[ selector ];
+
 					$( "<h3/>" )
 						.text( selector )
 						.appendTo( content );
 
-					$.each( data, function( idx, rule ) {
+					data.forEach( function( rule ) {
 						var ruleBlock = $( '<div/>' ).css( 'min-height', 50 ),
 							plain = $( '<div/>' ).css( {
 								'min-height' : 50,
@@ -165,8 +171,9 @@ $( function( ) {
 								'border' : '1px solid blue'
 							} ).addClass( 'orig' );
 
-						$.each( rule.current, function( key, value ) {
-							var line = $( "<div>" + key + ":" + value + ";" + "</div>" );
+						Object.keys( rule.current ).forEach( function( key ) {
+							var value = rule.current[ key ],
+								line = $( "<div>" + key + ": " + value + ";" + "</div>" );
 
 							line.clone( )
 								.appendTo( plain );
@@ -176,15 +183,16 @@ $( function( ) {
 								changedLine.css( {
 									'background-color' : 'green'
 								} ).attr( {
-									'title' : key + ":" + rule.origs[ key ] + ";"
+									'title' : key + ": " + rule.origs[ key ] + ";"
 								} );
 							}
 
 							changedLine.appendTo( changes );
 						} );
 
-						$.each( rule.origs, function( key, value ) {
-							var line = $( "<div>" + key + ":" + value + ";" + "</div>" );
+						Object.keys( rule.origs ).forEach( function( key ) {
+							var value = rule.current[ key ],
+								line = $( "<div>" + key + ": " + value + ";" + "</div>" );
 
 							if ( rule.removed[ key ] ) {
 								line.css( {
@@ -196,7 +204,7 @@ $( function( ) {
 								line.css( {
 									'background-color' : 'green'
 								} ).attr( {
-									'title' : key + ":" + rule.origs[ key ] + ";"
+									'title' : key + ": " + rule.origs[ key ] + ";"
 								} );
 							}
 
@@ -269,4 +277,4 @@ $( function( ) {
 	$( '#wp-calendar' ).load( function( ) {
 		console.log( this, arguments );
 	} );
-});
+} );
